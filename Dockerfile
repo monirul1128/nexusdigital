@@ -60,6 +60,7 @@ COPY --from=vendor /var/www/html/vendor /var/www/html/vendor
 COPY --from=frontend /app/public/build /var/www/html/public/build
 
 # Copy nginx config and entrypoint
+COPY deploy/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY deploy/nginx/nexusdigital.conf /etc/nginx/conf.d/default.conf
 COPY deploy/nginx/nexusdigital.conf /etc/nginx/conf.d/default.template
 
@@ -86,7 +87,7 @@ EXPOSE 8080
 COPY --chown=www:www . /var/www/html
 
 # Start script
-RUN printf '#!/bin/sh\nset -e\n: "${PORT:=8080}"\nsed -e "s/${PORT}/${PORT}/g" /etc/nginx/conf.d/default.template > /etc/nginx/conf.d/default.conf\nphp-fpm -D\nexec nginx -g "daemon off;"\n' > /usr/local/bin/start && \
+RUN printf '#!/bin/sh\nset -e\n: "${PORT:=8080}"\nsed -e "s/${PORT}/${PORT}/g" /etc/nginx/conf.d/default.template > /etc/nginx/conf.d/default.conf\nphp-fpm -D\nexec nginx -c /etc/nginx/nginx.conf -g "daemon off;"\n' > /usr/local/bin/start && \
     chmod +x /usr/local/bin/start
 
 CMD ["/usr/local/bin/start"]
