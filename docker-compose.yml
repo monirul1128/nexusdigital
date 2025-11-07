@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nexusdigital-php:latest
+    container_name: nexusdigital-app
+    env_file:
+      - .env
+    volumes:
+      - .:/var/www/html
+      - vendor:/var/www/html/vendor
+      - storage:/var/www/html/storage
+    networks:
+      - webnet
+    depends_on:
+      - db
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: nexusdigital-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html:ro
+      - ./deploy/nginx/nexusdigital.conf:/etc/nginx/conf.d/default.conf:ro
+      - storage:/var/www/html/storage
+    networks:
+      - webnet
+    depends_on:
+      - app
+
+  db:
+    image: mysql:8.0
+    container_name: nexusdigital-db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: laravel
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: laravel
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - webnet
+
+volumes:
+  vendor:
+  storage:
+  dbdata:
+
+networks:
+  webnet:
+    driver: bridge
