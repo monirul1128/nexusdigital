@@ -3,6 +3,9 @@
 # 1) Base PHP image with extensions
 FROM php:8.2-fpm-alpine AS php-base
 
+# Install nginx in final stage later
+RUN apk add --no-cache nginx
+
 # Install system dependencies and PHP extensions commonly needed by Laravel
 RUN apk add --no-cache \
     icu-dev libzip-dev oniguruma-dev \
@@ -34,6 +37,9 @@ RUN npm run build || npm run build --if-present
 # 4) Final runtime image
 FROM php-base AS app
 
+# Ensure nginx is available and configure directories
+RUN mkdir -p /run/nginx /var/log/nginx
+
 # Set production environment
 ENV APP_ENV=production \
     APP_DEBUG=false \
@@ -53,6 +59,10 @@ COPY --from=vendor /var/www/html/vendor /var/www/html/vendor
 # Copy built assets from frontend stage (assumes Vite outputs to public/build)
 COPY --from=frontend /app/public/build /var/www/html/public/build
 
+# Copy nginx config and entrypoint
+COPY deploy/nginx/nexusdigital.conf /etc/nginx/conf.d/default.conf
+COPY deploy/nginx/nexusdigital.conf /etc/nginx/conf.d/default.template
+
 # Optimize Laravel
 RUN php artisan config:cache || true \
  && php artisan route:cache || true \
@@ -64,8 +74,19 @@ RUN chown -R www:www /var/www/html \
  && find storage -type f -exec chmod 664 {} \; \
  && chmod -R ug+rwx storage bootstrap/cache
 
-USER www
+# Switch back to root to run both nginx and php-fpm
+USER root
 
-EXPOSE 9000
+# Render provides PORT; nginx must bind to it. We'll export it into nginx config at runtime.
+ENV PORT=8080
 
-CMD ["php-fpm", "-F"]
+EXPOSE 8080
+
+# Entrypoint to run php-fpm and nginx together
+COPY --chown=www:www . /var/www/html
+
+# Start script
+RUN printf '#!/bin/sh\nset -e\n: "${PORT:=8080}"\nsed -e "s/${PORT}/${PORT}/g" /etc/nginx/conf.d/default.template > /etc/nginx/conf.d/default.conf\nphp-fpm -D\nexec nginx -g "daemon off;"\n' > /usr/local/bin/start && \
+    chmod +x /usr/local/bin/start
+
+CMD ["/usr/local/bin/start"]
